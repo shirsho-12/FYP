@@ -50,7 +50,7 @@ def set_seed(args):
 
 
 class SquadTrainer:
-    def __init__(self, args, model):
+    def __init__(self, args, model, tokenizer):
         self.args = args
         self.config = AutoConfig.from_pretrained(
             args.model_name_or_path,
