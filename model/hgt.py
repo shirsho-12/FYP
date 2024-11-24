@@ -13,7 +13,10 @@ class HGT(torch.nn.Module):
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HGTConv(
-                hidden_channels, hidden_channels, metadata, num_heads, group="sum"
+                in_channels=hidden_channels,
+                out_channels=hidden_channels,
+                metadata=metadata,
+                heads=num_heads,
             )
             self.convs.append(conv)
 

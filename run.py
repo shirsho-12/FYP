@@ -5,12 +5,22 @@ import torch
 import transformers
 from model.graph_qa import GraphQA
 from squad.squad_loaders import get_parser, load_and_cache_examples, load_graph
-from squad.squad_trainer import evaluate, set_seed, train
+from squad.squad_trainer import set_seed, SquadTrainer
 from transformers import AutoConfig, AutoTokenizer, WEIGHTS_NAME
 
 logger = logging.getLogger(__name__)
 
+import datasets
+from datasets import load_dataset
+from pathlib import Path
+
+datasets.config.DOWNLOADED_DATASETS_PATH = Path.cwd() / "data"
+dataset = load_dataset("squad_v2")
+print(dataset)
+
+
 args = get_parser()
+
 
 if args.doc_stride >= args.max_seq_length - args.max_query_length:
     logger.warning(
@@ -31,18 +41,10 @@ if (
         )
     )
 
-# Setup CUDA, GPU & distributed training
-if args.local_rank == -1 or args.no_cuda:
-    device = torch.device(
-        "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
-    )
-    args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
-else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-    torch.cuda.set_device(args.local_rank)
-    device = torch.device("cuda", args.local_rank)
-    torch.distributed.init_process_group(backend="nccl")
-    args.n_gpu = 1
-args.device = device
+args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
+args.device = torch.device(
+    "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
+)
 
 # Setup logging
 logging.basicConfig(
@@ -53,7 +55,7 @@ logging.basicConfig(
 logger.warning(
     "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
     args.local_rank,
-    device,
+    args.device,
     args.n_gpu,
     bool(args.local_rank != -1),
     args.fp16,
@@ -75,12 +77,6 @@ config = AutoConfig.from_pretrained(
     args.config_name if args.config_name else args.model_name_or_path,
     cache_dir=args.cache_dir if args.cache_dir else None,
 )
-tokenizer = AutoTokenizer.from_pretrained(
-    args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
-    do_lower_case=args.do_lower_case,
-    cache_dir=args.cache_dir if args.cache_dir else None,
-    use_fast=False,  # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handeling
-)
 
 model = GraphQA.from_pretrained(
     args.model_name_or_path,
@@ -88,33 +84,24 @@ model = GraphQA.from_pretrained(
     cache_dir=args.cache_dir if args.cache_dir else None,
 )
 
-if args.local_rank == 0:
-    # Make sure only the first process in distributed training will download model & vocab
-    torch.distributed.barrier()
+tokenizer = AutoTokenizer.from_pretrained(
+    args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+    do_lower_case=args.do_lower_case,
+    cache_dir=args.cache_dir if args.cache_dir else None,
+    use_fast=False,  # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handeling
+)
 
-model.to(args.device)
+trainer = SquadTrainer(args, model, tokenizer)
 
 logger.info("Training/evaluation parameters %s", args)
 
 # Training
 if args.do_train:
-    train_dataset = load_and_cache_examples(
-        args, tokenizer, evaluate=False, output_examples=False
-    )
-    train_graph = load_graph(args, evaluate=False)
-    # TODO(mingzhe): Merge these two parts
-    global_step, tr_loss = train(args, train_dataset, train_graph, model, tokenizer)
-    logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
-
-# Save the trained model and the tokenizer
-if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
+    trainer.train()
     logger.info("Saving model checkpoint to %s", args.output_dir)
-    # Save a trained model, configuration and tokenizer using `save_pretrained()`.
-    # They can then be reloaded using `from_pretrained()`
-    # Take care of distributed/parallel training
-    model_to_save = model.module if hasattr(model, "module") else model
+    model_to_save = trainer.model.module if hasattr(model, "module") else model
     model_to_save.save_pretrained(args.output_dir)
-    tokenizer.save_pretrained(args.output_dir)
+    trainer.tokenizer.save_pretrained(args.output_dir)
 
     # Good practice: save your training arguments together with the trained model
     torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
@@ -128,10 +115,11 @@ if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0
         args.output_dir, do_lower_case=args.do_lower_case, use_fast=False
     )
     model.to(args.device)
+    trainer = SquadTrainer(args, model, tokenizer)
 
 # Evaluation - we can ask to evaluate all the checkpoints (sub-directories) in a directory
 results = {}
-if args.do_eval and args.local_rank in [-1, 0]:
+if args.do_eval:
     if args.do_train:
         logger.info("Loading checkpoints saved during training for evaluation")
         checkpoints = [args.output_dir]
@@ -153,9 +141,9 @@ if args.do_eval and args.local_rank in [-1, 0]:
         global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
         model = GraphQA.from_pretrained(checkpoint)
         model.to(args.device)
-
+        trainer.model = model
         # Evaluate
-        result = evaluate(args, model, tokenizer, prefix=global_step)
+        result = trainer.evaluate(prefix=global_step)
 
         logger.info("results: {}".format(result))
 

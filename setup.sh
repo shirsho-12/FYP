@@ -1,6 +1,8 @@
 #!/bin/bash
 
 conda create --name fyp python=3.12 --yes
+eval "$(conda shell.bash hook)"
+conda activate fyp
 pip install torch_geometric
 
 
@@ -16,5 +18,9 @@ else
     pip install 'transformers[torch]'
 fi
 
-pip install stanza editdistance jsonpickle
+pip install stanza editdistance jsonpickle tensorboard
 pip install -U scikit-learn datasets
+
+if [ ! -d "data" ]; then
+    mkdir data
+fi

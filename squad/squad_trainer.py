@@ -50,15 +50,22 @@ def set_seed(args):
 
 
 class SquadTrainer:
-    def __init__(self, args):
+    def __init__(self, args, model):
         self.args = args
-        self.config = AutoConfig.from_pretrained(args.model_name_or_path)
+        self.config = AutoConfig.from_pretrained(
+            args.model_name_or_path,
+            cache_dir=args.cache_dir if args.cache_dir else None,
+        )
         self.tokenizer = AutoTokenizer.from_pretrained(
-            args.model_name_or_path, use_fast=True
+            args.model_name_or_path,
+            do_lower_case=args.do_lower_case,
+            cache_dir=args.cache_dir if args.cache_dir else None,
+            use_fast=False,
         )
-        self.model = AutoModelForQuestionAnswering.from_pretrained(
-            args.model_name_or_path, config=self.config
-        )
+        # self.model = AutoModelForQuestionAnswering.from_pretrained(
+        # args.model_name_or_path, config=self.config,
+        # )
+        self.model = model
 
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"

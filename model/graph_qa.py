@@ -45,12 +45,12 @@ class GraphQA(BertPreTrainedModel):
 
         self.convs = torch.nn.ModuleList()
         for _ in range(self.graph_layer):
+            # NOTE: HGTConv only supports 'add' aggregation mode internally
             conv = HGTConv(
-                self.graph_hidden_channels,
-                self.graph_hidden_channels,
-                self.metadata,
-                self.graph_head,
-                group="sum",
+                in_channels=self.graph_hidden_channels,
+                out_channels=self.graph_hidden_channels,
+                metadata=self.metadata,
+                heads=self.graph_head,
             )
             self.convs.append(conv)
 
