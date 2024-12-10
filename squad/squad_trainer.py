@@ -105,9 +105,6 @@ class SquadTrainer:
         self.global_step = 0
         self.epoch = 0
         self.total_train_loss = 0.0
-        self.tb_writer = None
-
-        self.tb_writer = SummaryWriter(log_dir=args.tensorboard_dir)
 
     def train(self):
         args = self.args
