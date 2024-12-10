@@ -63,7 +63,7 @@ def _check_is_max_context(doc_spans, cur_span_index, position):
 
 
 def squad_convert_example_to_features(
-    tokenizer,
+    # tokenizer,
     example,
     max_seq_length,
     doc_stride,

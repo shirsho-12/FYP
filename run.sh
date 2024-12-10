@@ -1,4 +1,4 @@
-SQUAD_DIR="./data/squad_v2/raw/"
+SQUAD_DIR="./data/squad_v2/"
 
 python3 run.py \
     --model_type bert \

@@ -1,4 +1,4 @@
-name: fyp_2
+name: fyp
 channels:
   - pytorch
   - pyg
